@@ -1,6 +1,5 @@
 plugins {
     application
-
 }
 
 application {
@@ -17,6 +16,8 @@ val mockkVersion: String? by extra
 val externalLibraryVersion: String? by extra
 val fuelVersion: String? by extra
 val resultVersion: String? by extra
+val completableFutureVersion: String? by extra
+val listenableFutureVersion: String? by extra
 
 dependencies {
     implementation(project(":library"))
@@ -29,7 +30,10 @@ dependencies {
     testImplementation("org.junit.jupiter", "junit-jupiter-params", junitVersion)
     testImplementation("com.natpryce", "hamkrest", hamkrestVersion)
     testImplementation("io.mockk", "mockk", mockkVersion)
-
+    // for completable future
+    implementation("com.github.vjames19.kotlin-futures","kotlin-futures-jdk8",completableFutureVersion)
+    // for listenable future
+    implementation("com.github.vjames19.kotlin-futures","kotlin-futures-guava",listenableFutureVersion)
     // For main
     implementation("com.xenomachina", "kotlin-argparser", "2.0.7")
 }

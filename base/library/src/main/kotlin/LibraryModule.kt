@@ -27,8 +27,8 @@ class LibraryModule : KotlinModule() {
     @Singleton
     @Inject
     @torrentStorage
-    fun provideTorrentStorage(factory: SecureStorageFactory): CompletableFuture<SecureStorage> {
-        return factory.open("torrent".toByteArray())
+    fun provideTorrentStorage(factory: SecureStorageFactory): SecureStorage {
+        return factory.open("torrent".toByteArray()).get()
 
     }
 
@@ -36,15 +36,15 @@ class LibraryModule : KotlinModule() {
     @Singleton
     @Inject
     @statsStorage
-    fun provideStatsStorage(factory: SecureStorageFactory): CompletableFuture<SecureStorage> {
-        return factory.open("statistics".toByteArray())
+    fun provideStatsStorage(factory: SecureStorageFactory): SecureStorage {
+        return factory.open("statistics".toByteArray()).get()
     }
 
     @Provides
     @Singleton
     @Inject
     @peerStorage
-    fun providePeerStorage(factory: SecureStorageFactory): CompletableFuture<SecureStorage> {
-        return factory.open("peers".toByteArray())
+    fun providePeerStorage(factory: SecureStorageFactory): SecureStorage {
+        return factory.open("peers".toByteArray()).get()
     }
 }

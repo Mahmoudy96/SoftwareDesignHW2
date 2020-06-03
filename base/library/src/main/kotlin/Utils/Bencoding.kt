@@ -77,7 +77,6 @@ object Bencoding {
             while (true) {
                 if (itr >= obj.size) return Pair(null, -1)
                 num = obj[itr].toChar()
-                if (itr + 1 >= obj.size) return Pair(null, -1)
                 if (num == 'e') {
                     if (negFlag) return Pair(-sum, itr + 1)
                     return Pair(sum, itr + 1)
@@ -110,10 +109,10 @@ object Bencoding {
                 dict[keyItrPair.first] = valueItrPair.first
             }
         } else if (ben_type - '0' >= 0 && ben_type - '9' <= 9) {//string
-            if (itr + 1 >= obj.size) return Pair(null, -1)
+            if (itr >= obj.size) return Pair(null, -1)
             var str_len = ben_type - '0'
             while (true) {
-                if (itr + 1 >= obj.size) return Pair(null, -1)
+                if (itr >= obj.size) return Pair(null, -1)
                 val char: Char = obj[itr].toChar()
                 if (char == ':') {
                     if (flag == true) {//???
@@ -131,12 +130,10 @@ object Bencoding {
 //                        itr++
 //
 //                    }
-                    //TODO: convert obj to string then take substring?
-                    //possible for characters to be MORE THAN ONE BYTE???
                     str.append((obj.copyOfRange(itr + 1, stringEnd+1)).toString(Charsets.UTF_8))
                     itr = stringEnd + 1
                     //the pieces value is encoded differently, so we handle the decoding differently
-                    if ((str.toString() == "pieces") or (str.toString() == "peers")) {
+                    if ((str.toString() == "pieces") || ((str.toString() == "peers") && obj[itr].toChar() != 'l') ) {
                         flag = true
                     }
                     return Pair(str.toString(),itr) //itr is at byte AFTER end of string
@@ -205,7 +202,7 @@ object Bencoding {
      * Decodes object as a map.
      */
     public fun DecodeObjectM(obj: ByteArray): Map<Any, Any>? {
-        val out = mutableListOf<Any?>(); //TODO: change Any? to Any
+        val out = mutableListOf<Any?>();
         var itr = 0
         var started: Boolean = false
         while (true) {

@@ -24,7 +24,8 @@ allprojects {
         set("externalLibraryVersion", "1.2.1")
         set("fuelVersion","2.2.2")
         set("resultVersion","3.0.0")
-
+        set("completableFutureVersion", "1.2.0")
+        set("listenableFutureVersion", "1.2.0")
     }
 }
 
@@ -36,10 +37,7 @@ subprojects {
     dependencies {
         implementation(kotlin("stdlib-jdk8"))
         implementation(kotlin("reflect"))
-        // for completable future
-        implementation("com.github.vjames19.kotlin-futures","kotlin-futures-jdk8","1.2.0")
-        // for listenable future
-        implementation("com.github.vjames19.kotlin-futures","kotlin-futures-guava","1.2.0")
+
         testImplementation("org.junit.jupiter", "junit-jupiter-engine", junitVersion)
     }
 

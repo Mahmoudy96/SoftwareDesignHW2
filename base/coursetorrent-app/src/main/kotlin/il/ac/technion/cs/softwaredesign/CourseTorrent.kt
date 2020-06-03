@@ -7,9 +7,6 @@ import il.ac.technion.cs.softwaredesign.exceptions.PeerConnectException
 import il.ac.technion.cs.softwaredesign.exceptions.PieceHashException
 import il.ac.technion.cs.softwaredesign.exceptions.TrackerException
 import java.util.concurrent.CompletableFuture
-import Storage.Peer
-import Storage.Statistics
-import Storage.Torrent
 import com.google.inject.Inject
 
 /**

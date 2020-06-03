@@ -43,8 +43,4 @@ class PeerStorage @Inject constructor(
 
 }
 
-override fun getPeersList(infohash: String): CompletableFuture<List<Any>?> {
-    return peerStorage.read(infohash.toByteArray())
-        .thenApply { if (it == null) null else Conversion.fromByteArray(it) as List<Any>? }
-}
 }
