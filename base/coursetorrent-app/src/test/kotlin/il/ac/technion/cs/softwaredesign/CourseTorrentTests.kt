@@ -7,10 +7,11 @@ import com.natpryce.hamkrest.*
 import com.natpryce.hamkrest.assertion.assertThat
 import dev.misfitlabs.kotlinguice4.KotlinModule
 import dev.misfitlabs.kotlinguice4.getInstance
-import il.ac.technion.cs.softwaredesign.exceptions.TrackerException
+import il.ac.technion.cs.softwaredesign.exceptions.*
 import io.mockk.*
 //import il.ac.technion.cs.softwaredesign.storage.SecureStorage
 import org.junit.jupiter.api.*
+import java.util.concurrent.CompletionException
 
 class CourseTorrentTests {
     private val httpMock = mockk<HTTPGet>(relaxed=true)
@@ -36,14 +37,21 @@ class CourseTorrentTests {
     }
     @Test
     fun `unloading or announcing a torrent that hasn't been loaded fails`() {
-        assertThrows<IllegalArgumentException> { torrent.unload("5a8062c076fa85e8056451c0d9aa04349ae27909") }
-        assertThrows<IllegalArgumentException> { torrent.announces("5a8062c076fa85e8056451c0d9aa04349ae27909") }
+        var throwable = assertThrows<CompletionException> { torrent.unload("5a8062c076fa85e8056451c0d9aa04349ae27909").join() }
+        checkNotNull(throwable.cause)
+        assertThat(throwable.cause!!, isA<IllegalArgumentException>())
+        throwable = assertThrows<CompletionException> { torrent.announces("5a8062c076fa85e8056451c0d9aa04349ae27909").join() }
+        checkNotNull(throwable.cause)
+        assertThat(throwable.cause!!, isA<IllegalArgumentException>())
+
     }
     @Test
     fun `announce on unloaded torrent`() {
         val infohash = torrent.load(debian).get()
         torrent.unload(infohash)
-        assertThrows<IllegalArgumentException> { torrent.announces(infohash) }
+        val throwable = assertThrows<CompletionException> { torrent.announces(infohash).join() }
+        checkNotNull(throwable.cause)
+        assertThat(throwable.cause!!, isA<IllegalArgumentException>())
     }
     @Test
     fun `loading, unloading and reloading torrent`() {
@@ -55,7 +63,9 @@ class CourseTorrentTests {
     @Test
     fun `failing on loading the same torrent twice`() {
         torrent.load(debian)
-        assertThrows<IllegalStateException> { torrent.load(debian) }
+        val throwable = assertThrows<CompletionException> { torrent.load(debian).join() }
+        checkNotNull(throwable.cause)
+        assertThat(throwable.cause!!, isA<IllegalStateException>())
     }
     @Test
     fun `test correctness of announces`() {
@@ -96,7 +106,9 @@ class CourseTorrentTests {
         val infohash2 = torrent.load(announceListTorrent).get()
         val infohash3 = torrent.load(debian).get()
         torrent.unload(infohash2)
-        assertThrows<IllegalArgumentException> {   torrent.announces(infohash2)}
+        val throwable = assertThrows<CompletionException> {   torrent.announces(infohash2).join()}
+        checkNotNull(throwable.cause)
+        assertThat(throwable.cause!!, isA<IllegalArgumentException>())
         torrent.load(announceListTorrent)
         val announces2 = torrent.announces(infohash2).get()
         //Loading a different torrent to check that loading the new torrent doesn't affect previous torrents

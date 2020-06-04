@@ -8,6 +8,9 @@ import il.ac.technion.cs.softwaredesign.exceptions.TrackerException
 import Utils.*
 import java.net.URLEncoder
 import io.github.vjames19.futures.jdk8.Future
+import io.github.vjames19.futures.jdk8.flatMap
+import io.github.vjames19.futures.jdk8.map
+import io.github.vjames19.futures.jdk8.recover
 import java.util.concurrent.CompletableFuture
 
 /**
@@ -46,13 +49,11 @@ class CourseTorrentImpl @Inject constructor(
      */
     override fun load(torrent: ByteArray): CompletableFuture<String> {
         val value =
-            Bencoding.DecodeObjectM(torrent) ?: throw IllegalArgumentException() //throw must be in completablefuture
+            Bencoding.DecodeObjectM(torrent) ?: return Future{throw IllegalArgumentException()} //throw must be in completablefuture
         val info_hash = Bencoding.infohash(torrent)
         return torrentStorage.getTorrentData(info_hash)
             .thenApply {
                 if ((it != null) && (it.toString(Charsets.UTF_8) != unloadedVal)) throw IllegalStateException()
-
-            }.thenCompose {
                 torrentStorage.addTorrent(
                     info_hash,
                     Conversion.toByteArray(Bencoding.Announce(value)) as ByteArray
@@ -70,7 +71,9 @@ class CourseTorrentImpl @Inject constructor(
      */
     override fun unload(infohash: String): CompletableFuture<Unit> {
         return torrentStorage.getTorrentData(infohash)
-            .thenApply { if (it.toString() == unloadedVal) throw IllegalArgumentException()
+            .thenApply{it ?: throw IllegalArgumentException()}
+            .thenApply {
+                if (it.toString(encoding) == unloadedVal) throw IllegalArgumentException()
             }.thenCompose {
                 val u1 = torrentStorage.removeTorrent(infohash, unloadedVal)
                 val u2 = statStorage.updateStats(infohash, mapOf(unloadedVal to Scrape(0, 0, 0, null)))
@@ -95,11 +98,10 @@ class CourseTorrentImpl @Inject constructor(
     override fun announces(infohash: String): CompletableFuture<List<List<String>>> {
 
         return torrentStorage.getTorrentData(infohash)
-            .thenApply {
-                if (it != null) {
+                .thenApply { it ?: throw IllegalArgumentException() }
+                .thenApply {
                     if (it.toString(Charsets.UTF_8) == unloadedVal) throw IllegalArgumentException()
-                }
-                Conversion.fromByteArray(it as ByteArray) as List<List<String>>
+                    Conversion.fromByteArray(it as ByteArray) as List<List<String>>
             }
     }
 
@@ -139,7 +141,7 @@ class CourseTorrentImpl @Inject constructor(
             uploaded: Long,
             downloaded: Long,
             left: Long
-    ): CompletableFuture<Int> = TODO("impement THIS")
+    ): CompletableFuture<Int> {return Future{ 0 }.thenApply { throw IllegalArgumentException()}} //TODO("impement THIS")
     override fun scrape(infohash: String): CompletableFuture<Unit> = TODO("lol")
 
 /*

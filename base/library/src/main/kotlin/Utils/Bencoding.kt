@@ -160,7 +160,6 @@ object Bencoding {
      * Requires running Bencoding.DecodeObject or Bencoding.DecodeObjectM first, to prepare the class
      */
     public fun infohash(obj: ByteArray): String {
-
         val bytes = MessageDigest
             .getInstance("SHA-1")
             .digest(obj.copyOfRange(info_indx_first, info_indx_last))
