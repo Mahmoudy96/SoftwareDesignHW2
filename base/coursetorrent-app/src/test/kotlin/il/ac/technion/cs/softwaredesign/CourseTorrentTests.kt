@@ -162,15 +162,23 @@ class CourseTorrentTests {
     @Test
     fun `announce, scrape fail on unloaded torrent`(){
         val infohash = "5a8062c076fa85e8056451c0d9aa04349ae27909"
-        assertThrows<IllegalArgumentException>{torrent.announce(infohash, TorrentEvent.COMPLETED, 0,0,0)}
-        assertThrows<IllegalArgumentException>{torrent.scrape(infohash)}
+        var throwable = assertThrows<CompletionException>{torrent.announce(infohash, TorrentEvent.COMPLETED, 0,0,0).join()}
+        checkNotNull(throwable.cause)
+        assertThat(throwable.cause!!, isA<IllegalArgumentException>())
+        throwable = assertThrows<CompletionException>{torrent.scrape(infohash).join()}
+        checkNotNull(throwable.cause)
+        assertThat(throwable.cause!!, isA<IllegalArgumentException>())
+
     }
     @Test
     fun `invalidate, knownPeers, stats fail on unloaded torrent`(){
         val infohash = "5a8062c076fa85e8056451c0d9aa04349ae27909"
-        assertThrows<IllegalArgumentException>{torrent.invalidatePeer(infohash, KnownPeer("abc",5,"id"))}
-        assertThrows<IllegalArgumentException>{torrent.knownPeers(infohash)}
-        assertThrows<IllegalArgumentException> {torrent.trackerStats(infohash)}
+        assertThat(        assertThrows<CompletionException>{torrent.invalidatePeer(infohash, KnownPeer("abc",5,"id")).join()}
+                .cause!!, isA<IllegalArgumentException>())
+        assertThat(        assertThrows<CompletionException>{torrent.knownPeers(infohash).join()}
+                .cause!!, isA<IllegalArgumentException>())
+        assertThat(        assertThrows<CompletionException> {torrent.trackerStats(infohash).join()}
+                .cause!!, isA<IllegalArgumentException>())
     }
     @Test
     fun `invalidate unit test`(){
@@ -428,7 +436,10 @@ class CourseTorrentTests {
         } answers {
             "connection fail"
         }
-        assertThrows<TrackerException> { torrent.announce(infohash, TorrentEvent.STARTED,0,0,0) }
+
+
+        assertThat(assertThrows<CompletionException> { torrent.announce(infohash, TorrentEvent.STARTED,0,0,0).join() }
+                .cause!!, isA<TrackerException>())
     }
 
 }

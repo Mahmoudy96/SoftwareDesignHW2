@@ -1,6 +1,8 @@
 package il.ac.technion.cs.softwaredesign
 
-sealed class ScrapeData
+import java.io.Serializable
+
+sealed class ScrapeData : Serializable
 
 data class Scrape(
     val complete: Int,
