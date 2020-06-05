@@ -109,10 +109,10 @@ class CourseTorrentTests {
         val throwable = assertThrows<CompletionException> {   torrent.announces(infohash2).join()}
         checkNotNull(throwable.cause)
         assertThat(throwable.cause!!, isA<IllegalArgumentException>())
-        torrent.load(announceListTorrent)
+        torrent.load(announceListTorrent).get()
         val announces2 = torrent.announces(infohash2).get()
         //Loading a different torrent to check that loading the new torrent doesn't affect previous torrents
-        torrent.load(lame)
+        torrent.load(lame).get()
         //assert that the announce remains for the old torrent
         assertThat(announces2, allElements(hasSize(equalTo(1))))
         assertThat(announces2, hasSize(equalTo(8)))
@@ -151,7 +151,7 @@ class CourseTorrentTests {
         } returns true
 
         /* Tracker has infohash, 0 complete, 0 downloaded, 0 incomplete, no name key */
-        assertDoesNotThrow { torrent.scrape(infohash) }
+        assertDoesNotThrow { torrent.scrape(infohash).join() }
 
         assertThat(
             torrent.trackerStats(infohash).get(),
@@ -223,7 +223,7 @@ class CourseTorrentTests {
             httpMock.connectionSuccess
         } returns true
         /* Returned peer list is: [("127.0.0.22", 6887)] */
-        torrent.announce(infohash, TorrentEvent.STARTED, 0, 0, 2703360)
+        torrent.announce(infohash, TorrentEvent.STARTED, 0, 0, 2703360).get()
 
         every{
             httpMock.httpGET("https://127.0.0.1:8082/announce",any())
@@ -234,7 +234,7 @@ class CourseTorrentTests {
             httpMock.connectionSuccess
         } returns true
         /* Returned peer list is: [("127.0.0.22", 6887), ("127.0.0.21", 6889)] */
-        torrent.announce(infohash, TorrentEvent.REGULAR, 0, 81920, 2621440)
+        torrent.announce(infohash, TorrentEvent.REGULAR, 0, 81920, 2621440).get()
 
         val knownPeers = torrent.knownPeers(infohash).get()
         assertThat(
@@ -262,7 +262,7 @@ class CourseTorrentTests {
             httpMock.connectionSuccess
         } returns true
         /* Returned peer list is: [("127.0.0.22", 6887)] */
-        torrent.announce(infohash, TorrentEvent.STARTED, 0, 0, 2703360)
+        torrent.announce(infohash, TorrentEvent.STARTED, 0, 0, 2703360).get()
 
         every{
             httpMock.httpGET("https://127.0.0.1:8082/announce",any())
@@ -273,7 +273,7 @@ class CourseTorrentTests {
             httpMock.connectionSuccess
         } returns true
         /* Returned peer list is: [("127.0.0.22", 6887), ("127.0.0.21", 6889)] */
-        torrent.announce(infohash, TorrentEvent.REGULAR, 0, 81920, 2621440)
+        torrent.announce(infohash, TorrentEvent.REGULAR, 0, 81920, 2621440).get()
 
         val knownPeers = torrent.knownPeers(infohash).get()
 
@@ -310,7 +310,7 @@ class CourseTorrentTests {
         every{
             httpMock.connectionSuccess
         } returns true
-        torrent.announce(infohash, TorrentEvent.REGULAR, 0, 45, 20045)
+        torrent.announce(infohash, TorrentEvent.REGULAR, 0, 45, 20045).get()
         val announceList = torrent.announces(infohash).get()
         assertThat(
             announceList[1][0],
@@ -334,14 +334,14 @@ class CourseTorrentTests {
             "d5:flagsd20:min_request_intervali900ee5:filesd20:infohashinfohashinfod8:completei778e10:incompletei1e10:downloadedi18241eeee".toByteArray(charset)
         }
 
-        torrent.scrape(infohash)
+        torrent.scrape(infohash).get()
         val oldScrape =torrent.trackerStats(infohash).get()["http://legittorrents.info:2710"]
 
         every{
             httpMock.connectionSuccess
         } returns false
 
-        torrent.scrape(infohash)
+        torrent.scrape(infohash).get()
 
         assertThat(
             torrent.trackerStats(infohash).get()["http://legittorrents.info:2710"],
@@ -379,7 +379,7 @@ class CourseTorrentTests {
         } answers {
             "d5:filesdee".toByteArray(charset)
         }
-        torrent.scrape(infohash)
+        torrent.scrape(infohash).get()
         assertThat(
             torrent.trackerStats(infohash).get()["http://legittorrents.info:2710"],
             equalTo(oldScrape).not()
@@ -401,7 +401,7 @@ class CourseTorrentTests {
         } answers {
             "d8:intervali360e5:peers6:".toByteArray(charset) + byteArrayOf(127,0,0,22,26, 231.toByte()) + "e".toByteArray(charset)
         }
-        torrent.announce(infohash, TorrentEvent.STARTED, 0, 0, 0)
+        torrent.announce(infohash, TorrentEvent.STARTED, 0, 0, 0).get()
 
         //Now this tracker no longer works, but we still want to keep the peer
         every{
@@ -415,7 +415,7 @@ class CourseTorrentTests {
             "d8:intervali360e5:peers6:".toByteArray(charset) + byteArrayOf(127,0,0,21,26, 233.toByte()) + "e".toByteArray(charset)
         }
 
-        torrent.announce(infohash, TorrentEvent.STARTED, 0, 0, 0)
+        torrent.announce(infohash, TorrentEvent.STARTED, 0, 0, 0).get()
         assertThat(
             torrent.knownPeers(infohash).get(),
             anyElement(has(KnownPeer::ip, equalTo("127.0.0.22")) and has(KnownPeer::port, equalTo(6887)))

@@ -138,7 +138,6 @@ class CourseTorrentImpl @Inject constructor(
      * @return The interval in seconds that the client should wait before announcing again.
      */
     override fun announce(infohash: String, event: TorrentEvent, uploaded: Long, downloaded: Long, left: Long): CompletableFuture<Int> {
-
         var peerList: List<KnownPeer> = (peerStorage.getPeers(infohash).get() ?: emptyList<KnownPeer>()) as List<KnownPeer>
         if (peerList.isNotEmpty())
             if (peerList[0] == KnownPeer("", 0, unloadedVal)) peerList = emptyList<KnownPeer>()
@@ -154,13 +153,10 @@ class CourseTorrentImpl @Inject constructor(
         val peer_id = "-CS1000-$IDsumHashPart$randomString"
         val port = "6885"
         val request_params = createAnnounceRequestParams(infohash, event, uploaded, downloaded, left, peer_id, port)
-
         var latest_failure: String = ""
         var good_announce: String = ""
         var interval: Int = 0
         var success = false
-
-
         return Future {
             val previousValue = torrentStorage.getTorrentData(infohash).get() ?: throw IllegalArgumentException()
             if (previousValue.toString() == unloadedVal) throw IllegalArgumentException()
