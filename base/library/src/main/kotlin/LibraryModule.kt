@@ -19,7 +19,6 @@ class LibraryModule : KotlinModule() {
         bind<Statistics>().to<StatisticsStorage>()
         bind<Torrent>().to<TorrentStorage>()
         bind<torrentStats>().to<torrentStatistics>()
-        bind<ConnectedPeers>().to<ConnectedPeersStorage>()
 
 
     }
@@ -57,11 +56,5 @@ class LibraryModule : KotlinModule() {
     fun providesTorrentStatsStorage(factory: SecureStorageFactory): SecureStorage {
         return factory.open("torrentStats".toByteArray()).get()
     }
-    @Provides
-    @Singleton
-    @Inject
-    @Utils.ConnectedPeersStorage
-    fun providesConnectedPeerStorage(factory: SecureStorageFactory): SecureStorage {
-        return factory.open("ConnectedPeerStorage".toByteArray()).get()
-    }
+
 }

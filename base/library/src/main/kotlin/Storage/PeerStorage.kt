@@ -27,7 +27,7 @@ class PeerStorage @Inject constructor(
                 if (it == null) null
             }.thenCompose {
                 peerStorage.write(
-                    infohash.toByteArray(),
+                    infohash.toByteArray(),//TODO: does this actually work?
                     Conversion.toByteArray((it as Map<String, Any>).minus(peerId)) as ByteArray
                 )
             }.thenApply { Unit }
