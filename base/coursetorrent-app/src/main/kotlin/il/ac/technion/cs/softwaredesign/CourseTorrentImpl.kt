@@ -1,20 +1,23 @@
 package il.ac.technion.cs.softwaredesign
 
-import Storage.Peer
-import Storage.Statistics
-import Storage.Torrent
+import Storage.*
+import Utils.Bencoding
+import Utils.Conversion
+import Utils.HTTPGet
 import com.google.inject.Inject
+import il.ac.technion.cs.softwaredesign.exceptions.PeerChokedException
+import il.ac.technion.cs.softwaredesign.exceptions.PeerConnectException
 import il.ac.technion.cs.softwaredesign.exceptions.TrackerException
-import Utils.*
-import java.net.URLEncoder
 import io.github.vjames19.futures.jdk8.Future
-import io.github.vjames19.futures.jdk8.flatMap
+import io.github.vjames19.futures.jdk8.ImmediateFuture
 import io.github.vjames19.futures.jdk8.map
-import io.github.vjames19.futures.jdk8.recover
-import java.net.InetAddress
+import java.io.IOException
+import java.net.*
 import java.security.MessageDigest
 import java.util.concurrent.CompletableFuture
 
+const val DEFAULT_REQUEST_SIZE = 16384  // Default block size is 2^14 bytes, or 16kB.
+//TODO add global "clock" variabel
 /**
  * This is the class implementing CourseTorrent, a BitTorrent client.
  *
@@ -26,9 +29,13 @@ class CourseTorrentImpl @Inject constructor(
     private val statStorage: Statistics,
     private val peerStorage: Peer,
     private val torrentStorage: Torrent,
+    private val torrentStats: torrentStats,
+    private val connectedPeersStorage: ConnectedPeers,
     private val httpRequest: HTTPGet = HTTPGet()
 
 ) : CourseTorrent {
+    private var socket: ServerSocket? = null
+    private var announced_port = Pair("", 0)
     private val encoding = Charsets.UTF_8
     private val unloadedVal = "unloaded"
     private val charList: List<Char> = ('a'..'z') + ('A'..'Z') + ('0'..'9')
@@ -51,7 +58,8 @@ class CourseTorrentImpl @Inject constructor(
      */
     override fun load(torrent: ByteArray): CompletableFuture<String> {
         val value =
-            Bencoding.DecodeObjectM(torrent) ?: return Future{throw IllegalArgumentException()} //throw must be in completablefuture
+            Bencoding.DecodeObjectM(torrent)
+                ?: return Future { throw IllegalArgumentException() } //throw must be in completablefuture
         val info_hash = Bencoding.infohash(torrent)
         return torrentStorage.getTorrentData(info_hash)
             .thenApply {
@@ -73,7 +81,7 @@ class CourseTorrentImpl @Inject constructor(
      */
     override fun unload(infohash: String): CompletableFuture<Unit> {
         return torrentStorage.getTorrentData(infohash)
-            .thenApply{it ?: throw IllegalArgumentException()}
+            .thenApply { it ?: throw IllegalArgumentException() }
             .thenApply {
                 if (it.toString(encoding) == unloadedVal) throw IllegalArgumentException()
             }.thenCompose {
@@ -100,10 +108,10 @@ class CourseTorrentImpl @Inject constructor(
     override fun announces(infohash: String): CompletableFuture<List<List<String>>> {
 
         return torrentStorage.getTorrentData(infohash)
-                .thenApply { it ?: throw IllegalArgumentException() }
-                .thenApply {
-                    if (it.toString(Charsets.UTF_8) == unloadedVal) throw IllegalArgumentException()
-                    Conversion.fromByteArray(it as ByteArray) as List<List<String>>
+            .thenApply { it ?: throw IllegalArgumentException() }
+            .thenApply {
+                if (it.toString(Charsets.UTF_8) == unloadedVal) throw IllegalArgumentException()
+                Conversion.fromByteArray(it as ByteArray) as List<List<String>>
             }
     }
 
@@ -137,19 +145,26 @@ class CourseTorrentImpl @Inject constructor(
      * @throws IllegalArgumentException If [infohash] is not loaded.
      * @return The interval in seconds that the client should wait before announcing again.
      */
-    override fun announce(infohash: String, event: TorrentEvent, uploaded: Long, downloaded: Long, left: Long): CompletableFuture<Int> {
-        var peerList: List<KnownPeer> = (peerStorage.getPeers(infohash).get() ?: emptyList<KnownPeer>()) as List<KnownPeer>
+    override fun announce(
+        infohash: String,
+        event: TorrentEvent,
+        uploaded: Long,
+        downloaded: Long,
+        left: Long
+    ): CompletableFuture<Int> {
+        var peerList: List<KnownPeer> =
+            (peerStorage.getPeers(infohash).get() ?: emptyList<KnownPeer>()) as List<KnownPeer>
         if (peerList.isNotEmpty())
             if (peerList[0] == KnownPeer("", 0, unloadedVal)) peerList = emptyList<KnownPeer>()
         var statsMap: Map<String, ScrapeData> = (statStorage.getStats(infohash).get()
-                ?: emptyMap<String, ScrapeData>()) as Map<String, ScrapeData>
+            ?: emptyMap<String, ScrapeData>()) as Map<String, ScrapeData>
         if (statsMap.containsKey(unloadedVal)) statsMap = emptyMap<String, ScrapeData>()
         val encoding = "UTF-8"
         val IDsumHash = MessageDigest.getInstance("SHA-1").digest((315737809 + 313380164).toString().toByteArray())
         val IDsumHashPart = IDsumHash
-                .map { i -> "%x".format(i) }
-                .joinToString("")
-                .take(6)
+            .map { i -> "%x".format(i) }
+            .joinToString("")
+            .take(6)
         val peer_id = "-CS1000-$IDsumHashPart$randomString"
         val port = "6885"
         val request_params = createAnnounceRequestParams(infohash, event, uploaded, downloaded, left, peer_id, port)
@@ -182,7 +197,8 @@ class CourseTorrentImpl @Inject constructor(
                                 (announceResponse["peers"] as List<*>).forEach { peers ->
                                     val peerDict = (peers as Map<String, Any>)
                                     val peerIP = decodeIP(peerDict["ip"] as String?)
-                                    val newPeer = KnownPeer(peerIP, peerDict["port"] as Int, peerDict["peer id"] as String?)
+                                    val newPeer =
+                                        KnownPeer(peerIP, peerDict["port"] as Int, peerDict["peer id"] as String?)
                                     knownPeersList.filter { !(it.ip == newPeer.ip && it.port == newPeer.port) }
                                     knownPeersList.add(KnownPeer(newPeer.ip, newPeer.port, newPeer.peerId))
                                 }
@@ -200,11 +216,14 @@ class CourseTorrentImpl @Inject constructor(
                             peerStorage.addPeers(infohash, knownPeersList)
                             interval = announceResponse["interval"] as Int
                             success = true
-                            val scrapeData: ScrapeData = Scrape((announceResponse["complete"] ?: 0) as Int,
-                                    (announceResponse["downloaded"] ?: 0) as Int,
-                                    (announceResponse["incomplete"] ?: 0) as Int,
-                                    announceResponse["name"] as String?) as ScrapeData
-                            val newMap = statsMap.plus(Pair(announce_url.split("/").dropLast(1).joinToString("/"), scrapeData))
+                            val scrapeData: ScrapeData = Scrape(
+                                (announceResponse["complete"] ?: 0) as Int,
+                                (announceResponse["downloaded"] ?: 0) as Int,
+                                (announceResponse["incomplete"] ?: 0) as Int,
+                                announceResponse["name"] as String?
+                            ) as ScrapeData
+                            val newMap =
+                                statsMap.plus(Pair(announce_url.split("/").dropLast(1).joinToString("/"), scrapeData))
                             statStorage.updateStats(infohash, newMap)
                         }
                     }
@@ -222,9 +241,10 @@ class CourseTorrentImpl @Inject constructor(
             interval
         }
     }
+
     private fun scrapeAux(
-            statsMap: Map<String, ScrapeData>,
-            infohash: String
+        statsMap: Map<String, ScrapeData>,
+        infohash: String
     ): CompletableFuture<Unit> {
         var map = statsMap
         val encoding = "UTF-8"
@@ -234,7 +254,7 @@ class CourseTorrentImpl @Inject constructor(
                 // for (announce_url in announce_tier) {
                 val splitAnnounce = announce_url.split("/")
                 val splitScrape =
-                        splitAnnounce.dropLast(1) + Regex("^announce").replace(splitAnnounce.last(), "scrape")
+                    splitAnnounce.dropLast(1) + Regex("^announce").replace(splitAnnounce.last(), "scrape")
                 val scrapeUrl = splitScrape.joinToString("/")
                 val urlName = splitAnnounce.dropLast(1).joinToString("/")
                 val data = httpRequest.httpGET(scrapeUrl, requestParams)
@@ -243,7 +263,7 @@ class CourseTorrentImpl @Inject constructor(
                     map = map.plus(Pair(urlName, Failure(reason = "Connection Failure")))
                 } else {
                     val scrapeResponse =
-                            Bencoding.DecodeObjectM(data as ByteArray) ?: throw IllegalArgumentException()
+                        Bencoding.DecodeObjectM(data as ByteArray) ?: throw IllegalArgumentException()
                     val statsDict = scrapeResponse["files"] as Map<*, *>
                     if (statsDict.isEmpty()) {
                         map = map.filter { (k, _) -> k != urlName }
@@ -251,10 +271,10 @@ class CourseTorrentImpl @Inject constructor(
                     } else {
                         val statsValues = statsDict.values.toList()[0] as Map<*, *>
                         val scrapeData: ScrapeData = Scrape(
-                                statsValues["complete"] as Int,
-                                statsValues["downloaded"] as Int,
-                                statsValues["incomplete"] as Int,
-                                statsValues["name"] as String?
+                            statsValues["complete"] as Int,
+                            statsValues["downloaded"] as Int,
+                            statsValues["incomplete"] as Int,
+                            statsValues["name"] as String?
                         ) as ScrapeData
                         map = map.filter { (k, _) -> k != urlName }
                         map = map.plus(Pair(urlName, scrapeData))
@@ -282,15 +302,15 @@ class CourseTorrentImpl @Inject constructor(
         val newmap = statStorage.getStats(infohash).get()
         //var map = emptyMap<String, ScrapeData>()
         return torrentStorage.getTorrentData(infohash)
-                .thenApply { it ?: throw IllegalArgumentException() }
-                .thenApply {
-                    if (it.toString() == unloadedVal) throw IllegalArgumentException()
-                    if (newmap == null || (newmap as Map<String, ScrapeData>).containsKey(unloadedVal))
-                        scrapeAux(emptyMap<String, ScrapeData>(), infohash).get()
-                    else
+            .thenApply { it ?: throw IllegalArgumentException() }
+            .thenApply {
+                if (it.toString() == unloadedVal) throw IllegalArgumentException()
+                if (newmap == null || (newmap as Map<String, ScrapeData>).containsKey(unloadedVal))
+                    scrapeAux(emptyMap<String, ScrapeData>(), infohash).get()
+                else
 
-                        scrapeAux(newmap as Map<String, ScrapeData>, infohash).get()
-                }
+                    scrapeAux(newmap as Map<String, ScrapeData>, infohash).get()
+            }
 
     }
 
@@ -305,15 +325,18 @@ class CourseTorrentImpl @Inject constructor(
      * @throws IllegalArgumentException If [infohash] is not loaded.
      */
     override fun invalidatePeer(infohash: String, peer: KnownPeer): CompletableFuture<Unit> {
-        var peerList : List<KnownPeer> = (peerStorage.getPeers(infohash).get() ?: emptyList<KnownPeer>()) as List<KnownPeer>
-        if(peerList.isNotEmpty())
-            if (peerList[0] == KnownPeer("",0,unloadedVal))
+        var peerList: List<KnownPeer> =
+            (peerStorage.getPeers(infohash).get() ?: emptyList<KnownPeer>()) as List<KnownPeer>
+        if (peerList.isNotEmpty())
+            if (peerList[0] == KnownPeer("", 0, unloadedVal))
                 peerList = emptyList<KnownPeer>()
         return torrentStorage.getTorrentData(infohash)
-                .thenApply { it ?: throw IllegalArgumentException() }
-                .thenApply { if (it.toString() == unloadedVal) throw IllegalArgumentException() }
-                .thenCompose { val newList = peerList.filter{ !(it.ip==peer.ip && it.port == peer.port) }
-                    peerStorage.addPeers(infohash, newList) }
+            .thenApply { it ?: throw IllegalArgumentException() }
+            .thenApply { if (it.toString() == unloadedVal) throw IllegalArgumentException() }
+            .thenCompose {
+                val newList = peerList.filter { !(it.ip == peer.ip && it.port == peer.port) }
+                peerStorage.addPeers(infohash, newList)
+            }
     }
 
 
@@ -332,12 +355,12 @@ class CourseTorrentImpl @Inject constructor(
      */
     override fun knownPeers(infohash: String): CompletableFuture<List<KnownPeer>> {
         return torrentStorage.getTorrentData(infohash)
-                .thenApply { it ?: throw IllegalArgumentException() }
-                .thenApply { if (it.toString() == unloadedVal) throw IllegalArgumentException() }
-                .thenCompose { peerStorage.getPeers(infohash) }.thenApply{ it ?: emptyList()}.thenApply{
-                    (it as List<KnownPeer>).sortedBy {
-                        it.ip.split(".").asSequence().map { "%02x".format(it.toInt().toByte()) }.toList()
-                                .joinToString(separator = "") { it }
+            .thenApply { it ?: throw IllegalArgumentException() }
+            .thenApply { if (it.toString() == unloadedVal) throw IllegalArgumentException() }
+            .thenCompose { peerStorage.getPeers(infohash) }.thenApply { it ?: emptyList() }.thenApply {
+                (it as List<KnownPeer>).sortedBy {
+                    it.ip.split(".").asSequence().map { "%02x".format(it.toInt().toByte()) }.toList()
+                        .joinToString(separator = "") { it }
                 }
             }
     }
@@ -363,10 +386,10 @@ class CourseTorrentImpl @Inject constructor(
     override fun trackerStats(infohash: String): CompletableFuture<Map<String, ScrapeData>> {
 
         return torrentStorage.getTorrentData(infohash)
-                .thenApply{ it ?: throw IllegalArgumentException()}
-                .thenApply { if (it.toString() == unloadedVal) throw IllegalArgumentException() }
-                .thenCompose { statStorage.getStats(infohash) }
-                .thenApply { it ?: emptyMap() }.thenApply { it as Map<String, ScrapeData> }
+            .thenApply { it ?: throw IllegalArgumentException() }
+            .thenApply { if (it.toString() == unloadedVal) throw IllegalArgumentException() }
+            .thenCompose { statStorage.getStats(infohash) }
+            .thenApply { it ?: emptyMap() }.thenApply { it as Map<String, ScrapeData> }
     }
 
 
@@ -412,15 +435,16 @@ class CourseTorrentImpl @Inject constructor(
         )
         return request_params
     }
-    private fun decodeIP(ip: String?) : String {
-        if(ip == null) return "0.0.0.0"
-        if(ip.toByteArray().size == 4) {
+
+    private fun decodeIP(ip: String?): String {
+        if (ip == null) return "0.0.0.0"
+        if (ip.toByteArray().size == 4) {
             return InetAddress.getByAddress(ip.toByteArray()).hostAddress
-        }
-        else {
+        } else {
             return ip
         }
     }
+
     /**
      * Return information about the torrent identified by [infohash]. These statistics represent the current state
      * of the client at the time of querying.
@@ -432,7 +456,9 @@ class CourseTorrentImpl @Inject constructor(
      * @throws IllegalArgumentException if [infohash] is not loaded.
      * @return Torrent statistics.
      */
-    override fun torrentStats(infohash: String): CompletableFuture<TorrentStats> = TODO("Implement me!")
+    override fun torrentStats(infohash: String): CompletableFuture<TorrentStats> {
+        return torrentStats.getTorrentStats(infohash) as CompletableFuture<TorrentStats>
+    }
 
     /**
      * Start listening for peer connections on a chosen port.
@@ -446,7 +472,22 @@ class CourseTorrentImpl @Inject constructor(
      *
      * @throws IllegalStateException If already listening.
      */
-    override fun start(): CompletableFuture<Unit> = TODO("Implement me!")
+    override fun start(): CompletableFuture<Unit> {
+        return ImmediateFuture {
+            if (socket != null) throw IllegalStateException()
+            else try {
+                socket = ServerSocket(announced_port.second)
+                println("Connected")
+
+            } catch (u: UnknownHostException) {   //TODO:check what should we do when socket exceptions are thrown
+                System.out.println(u)
+
+            } catch (i: IOException) {
+                println(i)
+            }
+        }
+
+    }
 
     /**
      * Disconnect from all connected peers, and stop listening for new peer connections
@@ -457,7 +498,17 @@ class CourseTorrentImpl @Inject constructor(
      *
      * @throws IllegalStateException If not listening.
      */
-    override fun stop(): CompletableFuture<Unit> = TODO("Implement me!")
+    override fun stop(): CompletableFuture<Unit> {
+        return ImmediateFuture {
+            if (socket == null) throw IllegalStateException()
+            else try {
+                socket!!.close();
+
+            } catch (i: IOException) {
+                println(i)
+            }
+        }
+    }
 
     /**
      * Connect to [peer] using the peer protocol described in [BEP 003](http://bittorrent.org/beps/bep_0003.html).
@@ -505,7 +556,11 @@ class CourseTorrentImpl @Inject constructor(
      *
      * @throws IllegalArgumentException if [infohash] is not loaded.
      */
-    override fun connectedPeers(infohash: String): CompletableFuture<List<ConnectedPeer>> = TODO("Implement me!")
+    override fun connectedPeers(infohash: String): CompletableFuture<List<ConnectedPeer>> {
+        return connectedPeersStorage.getConnectedPeers(infohash)
+            .thenApply { if (it == null) throw IllegalArgumentException() }
+            .thenApply { it as List<ConnectedPeer> }
+    }
 
     /**
      * Send a choke message to [peer], which is currently connected. Future calls to [connectedPeers] should show that
@@ -515,7 +570,27 @@ class CourseTorrentImpl @Inject constructor(
      *
      * @throws IllegalArgumentException if [infohash] is not loaded or [peer] is not connected.
      */
-    override fun choke(infohash: String, peer: KnownPeer): CompletableFuture<Unit> = TODO("Implement me!")
+    override fun choke(infohash: String, peer: KnownPeer): CompletableFuture<Unit> {
+        return torrentStorage.getTorrentData(infohash)
+            .thenApply { if ((it != null) && (it.toString(Charsets.UTF_8) != unloadedVal)) throw IllegalArgumentException() }
+            .thenCompose {
+                if (peer.peerId == null) throw IllegalArgumentException()
+                connectedPeersStorage.getConnectedPeer(infohash, peer.peerId).thenApply {
+                    if (it == null) throw IllegalArgumentException()
+                    (it as ConnectedPeer).amChoking = true
+                    val msg = WireProtocolEncoder.encode(0.toByte())
+                }.thenCompose {
+                    //TODO send the message to peer
+                    connectedPeersStorage.updateePeer(
+                        infohash,
+                        peer.peerId,
+                        (it as ConnectedPeer)
+                    )
+                }
+
+            }
+
+    }
 
     /**
      * Send an unchoke message to [peer], which is currently connected. Future calls to [connectedPeers] should show
@@ -525,7 +600,23 @@ class CourseTorrentImpl @Inject constructor(
      *
      * @throws IllegalArgumentException if [infohash] is not loaded or [peer] is not connected.
      */
-    override fun unchoke(infohash: String, peer: KnownPeer): CompletableFuture<Unit> = TODO("Implement me!")
+    override fun unchoke(infohash: String, peer: KnownPeer): CompletableFuture<Unit> {
+        return torrentStorage.getTorrentData(infohash)
+            .thenApply { if ((it != null) && (it.toString(Charsets.UTF_8) != unloadedVal)) throw IllegalArgumentException() }
+            .thenCompose {
+                if (peer.peerId == null) throw IllegalArgumentException()
+                connectedPeersStorage.getConnectedPeer(infohash, peer.peerId).thenApply {
+                    if (it == null) throw IllegalArgumentException()
+                    (it as ConnectedPeer).amChoking = false
+                    val msg = WireProtocolEncoder.encode(1.toByte())
+                }.thenCompose {
+                    //TODO: send an unchoke msg to peer
+                    connectedPeersStorage.updateePeer(infohash, peer.peerId, (it as ConnectedPeer))
+                }
+
+            }
+
+    }
 
     /**
      * Handle any messages that peers have sent, and send keep-alives if needed, as well as interested/not interested
@@ -557,7 +648,19 @@ class CourseTorrentImpl @Inject constructor(
      *
      * This is an *update* command. (maybe)
      */
-    override fun handleSmallMessages(): CompletableFuture<Unit> = TODO("Implement me!")
+    override fun handleSmallMessages(): CompletableFuture<Unit> = TODO("implement function")
+//    {
+//        val msg = this.socket?.getInputStream()
+//        val msgType = getMType(msg?.read())
+//        when (msgType) {
+//            PeerMsgType.CHOKE -> choke() //which peer to choke
+//            PeerMsgType.UNCHOKE -> unchoke()//which peer to unchoke
+//            PeerMsgType.HAVE -> //payload is a single number, the index which that downloader just completed and checked the hash of.
+//                PeerMsgType.REQUEST
+//            ->
+//        }
+//
+//    }
 
     /**
      * Download piece number [pieceIndex] of the torrent identified by [infohash].
@@ -581,8 +684,29 @@ class CourseTorrentImpl @Inject constructor(
      * @throws PieceHashException if the piece SHA-1 hash does not match the hash from the meta-info file.
      * @throws IllegalArgumentException if [infohash] is not loaded, [peer] is not known, or [peer] does not have [pieceIndex].
      */
-    override fun requestPiece(infohash: String, peer: KnownPeer, pieceIndex: Long): CompletableFuture<Unit> =
-        TODO("Implement me!")
+    override fun requestPiece(infohash: String, peer: KnownPeer, pieceIndex: Long): CompletableFuture<Unit> {
+
+        return torrentStorage.getTorrentData(infohash)
+            .thenApply {
+                if ((it != null) && (it.toString(Charsets.UTF_8) != unloadedVal)) throw IllegalArgumentException()
+            }
+            .thenCompose {
+                if (peer.peerId == null) throw IllegalArgumentException()
+                connectedPeersStorage.getConnectedPeer(infohash, peer.peerId).thenApply {
+                    if (it == null) throw PeerConnectException("")  //TODO what message to pass to peerexception
+                    if ((it as ConnectedPeer).peerChoking) throw PeerChokedException("")
+                    //TODO: check if peer has the pieceIndex from peerPieces Storage that wee need to implement
+                    /******now requesting if p******/
+                    val pieceLen: Byte=0// TODO:get piece len
+                    var len: Int = DEFAULT_REQUEST_SIZE
+                    while (len <= pieceLen) {
+                        //TODO: send a request message to peer + take the piece returned
+                        if (len + DEFAULT_REQUEST_SIZE > pieceLen) len += pieceLen - DEFAULT_REQUEST_SIZE else len += DEFAULT_REQUEST_SIZE
+                    }
+                    //TODO: update torrentStats
+                }
+            }
+    }
 
     /**
      * Send piece number [pieceIndex] of the [infohash] torrent to [peer].
@@ -595,7 +719,8 @@ class CourseTorrentImpl @Inject constructor(
      *
      * @throws IllegalArgumentException if [infohash] is not loaded, [peer] is not known, or [peer] did not request [pieceIndex].
      */
-    override fun sendPiece(infohash: String, peer: KnownPeer, pieceIndex: Long): CompletableFuture<Unit> = TODO("Implement me!")
+    override fun sendPiece(infohash: String, peer: KnownPeer, pieceIndex: Long): CompletableFuture<Unit> =
+        TODO("Implement me!")
 
     /**
      * List pieces that are currently available for download immediately.
@@ -658,7 +783,8 @@ class CourseTorrentImpl @Inject constructor(
      * @param files A mapping from filename to file contents.
      * @throws IllegalArgumentException if [infohash] is not loaded,
      */
-    override fun loadFiles(infohash: String, files: Map<String, ByteArray>): CompletableFuture<Unit> = TODO("Implement me!")
+    override fun loadFiles(infohash: String, files: Map<String, ByteArray>): CompletableFuture<Unit> =
+        TODO("Implement me!")
 
     /**
      * Compare SHA-1 hash for the loaded pieces of torrent [infohash] against the meta-info file. If a piece fails hash
