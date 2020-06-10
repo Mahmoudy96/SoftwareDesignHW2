@@ -19,6 +19,8 @@ class LibraryModule : KotlinModule() {
         bind<Statistics>().to<StatisticsStorage>()
         bind<Torrent>().to<TorrentStorage>()
         bind<torrentStats>().to<torrentStatistics>()
+        bind<File>().to<FileStorage>()
+        bind<Pieces>().to<torrentPieces>()
 
 
     }
@@ -55,6 +57,22 @@ class LibraryModule : KotlinModule() {
     @Utils.torrentStats
     fun providesTorrentStatsStorage(factory: SecureStorageFactory): SecureStorage {
         return factory.open("torrentStats".toByteArray()).get()
+    }
+
+    @Provides
+    @Singleton
+    @Inject
+    @Utils.fileStorage
+    fun providesFileStorage(factory: SecureStorageFactory): SecureStorage {
+        return factory.open("fileStorage".toByteArray()).get()
+    }
+
+    @Provides
+    @Singleton
+    @Inject
+    @Utils.piecesStorage
+    fun providesPiecesStorage(factory: SecureStorageFactory): SecureStorage {
+        return factory.open("piecesStorage".toByteArray()).get()
     }
 
 }
