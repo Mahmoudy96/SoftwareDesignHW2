@@ -232,4 +232,29 @@ object Bencoding {
             return mutableListOf(mutableListOf<String>(obj["announce"] as String))
         }
     }
+
+    public fun Info(obj: Map<Any, Any>): InfoDictionary {
+        val infoDict = obj["info"] as Map<String, Any>
+        var files: List<MultiFile>? = null
+        if(infoDict["files"] != null){
+            files = mutableListOf<MultiFile>()
+            for(filepath in (infoDict["files"] as List<Map<String,Any>>)){
+                val pathlist = filepath["path"] as List<String>
+
+                files.add(MultiFile(
+                        length = filepath["length"] as Int,
+                        path = pathlist.joinToString("/")
+
+                ))
+            }
+        }
+        return InfoDictionary(
+                pieceLength = infoDict["piece length"] as Int,
+                pieces = infoDict["pieces"] as ByteArray,
+                name = infoDict["name"] as String,
+                length = infoDict["length"] as Int?,
+                files = files
+        )
+    }
+
 }

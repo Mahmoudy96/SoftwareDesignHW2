@@ -1,6 +1,8 @@
 package LibraryPackage
 
 import Utils.Bencoding
+import Utils.Conversion
+import Utils.InfoDictionary
 import com.natpryce.hamkrest.*
 import com.natpryce.hamkrest.assertion.assertThat
 import org.junit.jupiter.api.Nested
@@ -122,5 +124,12 @@ class BencodingTest {
         //8 urls in announce-list + announce
         assertThat(announces, hasSize(equalTo(8)))
         assertThat(announces, anyElement(hasElement("udp://62.138.0.158:6969/announce")))
+    }
+
+    @Test fun `info dictionary, byte array Conversion`(){
+        val decoding = Bencoding.DecodeObjectM(announceListTorrent)
+        val bytedDec = Conversion.toByteArray(decoding?.let { Bencoding.Info(it) })
+        val deBytedDec = Conversion.fromByteArray(bytedDec as ByteArray?) as InfoDictionary
+        print("debyted: " + deBytedDec)
     }
 }

@@ -1,7 +1,6 @@
 package Utils
 
 import com.google.inject.BindingAnnotation
-
 //binding with annotations Tutorial on Guice
 @Target(
     AnnotationTarget.CONSTRUCTOR,
@@ -34,42 +33,44 @@ annotation class statsStorage
 @BindingAnnotation
 annotation class peerStorage
 
-@Target(
-    AnnotationTarget.CONSTRUCTOR,
-    AnnotationTarget.VALUE_PARAMETER,
-    AnnotationTarget.PROPERTY,
-    AnnotationTarget.TYPE, AnnotationTarget.FUNCTION
-)
-@Retention(AnnotationRetention.RUNTIME)
-@BindingAnnotation
-annotation class ConnectedPeersStorage
 
 @Target(
-    AnnotationTarget.CONSTRUCTOR,
-    AnnotationTarget.VALUE_PARAMETER,
-    AnnotationTarget.PROPERTY,
-    AnnotationTarget.TYPE, AnnotationTarget.FUNCTION
+        AnnotationTarget.CONSTRUCTOR,
+        AnnotationTarget.VALUE_PARAMETER,
+        AnnotationTarget.PROPERTY,
+        AnnotationTarget.TYPE, AnnotationTarget.FUNCTION
 )
 @Retention(AnnotationRetention.RUNTIME)
 @BindingAnnotation
 annotation class torrentStats
 
 @Target(
-    AnnotationTarget.CONSTRUCTOR,
-    AnnotationTarget.VALUE_PARAMETER,
-    AnnotationTarget.PROPERTY,
-    AnnotationTarget.TYPE, AnnotationTarget.FUNCTION
+        AnnotationTarget.CONSTRUCTOR,
+        AnnotationTarget.VALUE_PARAMETER,
+        AnnotationTarget.PROPERTY,
+        AnnotationTarget.TYPE, AnnotationTarget.FUNCTION
 )
 @Retention(AnnotationRetention.RUNTIME)
 @BindingAnnotation
 annotation class fileStorage
 
 @Target(
-    AnnotationTarget.CONSTRUCTOR,
-    AnnotationTarget.VALUE_PARAMETER,
-    AnnotationTarget.PROPERTY,
-    AnnotationTarget.TYPE, AnnotationTarget.FUNCTION
+        AnnotationTarget.CONSTRUCTOR,
+        AnnotationTarget.VALUE_PARAMETER,
+        AnnotationTarget.PROPERTY,
+        AnnotationTarget.TYPE, AnnotationTarget.FUNCTION
 )
 @Retention(AnnotationRetention.RUNTIME)
 @BindingAnnotation
-annotation class piecesStorage
+annotation class infoStorage
+
+
+@Target(
+        AnnotationTarget.CONSTRUCTOR,
+        AnnotationTarget.VALUE_PARAMETER,
+        AnnotationTarget.PROPERTY,
+        AnnotationTarget.TYPE, AnnotationTarget.FUNCTION
+)
+@Retention(AnnotationRetention.RUNTIME)
+@BindingAnnotation
+annotation class bitfieldStorage

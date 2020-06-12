@@ -9,19 +9,17 @@ import com.google.inject.Provides
 import com.google.inject.Singleton
 import dev.misfitlabs.kotlinguice4.KotlinModule
 
-import il.ac.technion.cs.softwaredesign.storage.impl.*
 import il.ac.technion.cs.softwaredesign.storage.*
-import java.util.concurrent.CompletableFuture
 
 class LibraryModule : KotlinModule() {
     override fun configure() {
         bind<Peer>().to<PeerStorage>()
         bind<Statistics>().to<StatisticsStorage>()
         bind<Torrent>().to<TorrentStorage>()
-        bind<torrentStats>().to<torrentStatistics>()
+        bind<TorrentStats>().to<TorrentStatistics>()
         bind<File>().to<FileStorage>()
-        bind<Pieces>().to<torrentPieces>()
-
+        bind<Info>().to<InfoStorage>()
+        bind<Bitfield>().to<BitfieldStorage>()
 
     }
 
@@ -70,9 +68,16 @@ class LibraryModule : KotlinModule() {
     @Provides
     @Singleton
     @Inject
-    @Utils.piecesStorage
-    fun providesPiecesStorage(factory: SecureStorageFactory): SecureStorage {
-        return factory.open("piecesStorage".toByteArray()).get()
+    @Utils.infoStorage
+    fun providesInfoStorage(factory: SecureStorageFactory): SecureStorage {
+        return factory.open("infoStorage".toByteArray()).get()
     }
 
+    @Provides
+    @Singleton
+    @Inject
+    @Utils.bitfieldStorage
+    fun providesBitfieldStorage(factory: SecureStorageFactory): SecureStorage {
+        return factory.open("bitfieldStorage".toByteArray()).get()
+    }
 }
