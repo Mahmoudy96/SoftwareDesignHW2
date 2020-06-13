@@ -12,7 +12,6 @@ import java.lang.Exception
 import java.lang.System.currentTimeMillis
 import java.net.*
 import java.security.MessageDigest
-import java.util.*
 import java.util.concurrent.CompletableFuture
 import kotlin.collections.HashMap
 import kotlin.experimental.or
@@ -721,7 +720,7 @@ class CourseTorrentImpl @Inject constructor(
                 if (connectedpeer.first.peerChoking) throw PeerChokedException("") //TODO: not sure about this
 
                 //checked if the peer has the piece
-                val peersPieces = peersPiecesStorage[infohash]?.find { it -> it.first.knownPeer.equals(peer) }?.second
+                val peersPieces = peersPiecesStorage[infohash]?.find { it.first.knownPeer.equals(peer) }?.second
                 if (peersPieces != null && !(peersPieces.contains(pieceIndex))) throw IllegalArgumentException()
                 /******now requesting if p******/
                 val sockt = connectedpeer.second
@@ -770,7 +769,7 @@ class CourseTorrentImpl @Inject constructor(
         return torrentStorage.getTorrentData(infohash)
             .thenApply {
                 //check if peer requested pieceIndex
-                val peersPieces = peersRequests[infohash]?.find { it-> it.first.knownPeer.equals(peer) }?.second
+                val peersPieces = peersRequests[infohash]?.find { it.first.knownPeer.equals(peer) }?.second
                 if(peersPieces!=null && !(peersPieces.contains(pieceIndex))) throw IllegalArgumentException()
                 if (it == null) throw IllegalArgumentException()
             }.thenCompose {
@@ -838,10 +837,36 @@ class CourseTorrentImpl @Inject constructor(
                 .thenApply { if(it.toString() == unloadedVal) throw IllegalArgumentException() }
                 .thenCompose { bitfieldStorage.getBitfield(infohash) }
                 .thenApply { bitfield ->
-                    mapOf()
+                    //todo am interested? keep, remove?
+                    var downloadedPieces : List<Long> = emptyList()
+                    for(byte in bitfield){
+                        val bitList : List<Long> = byte.toUByte().toString(2).padStart(8,'0').toList().map {it.toString().toLong()}
+                        downloadedPieces = downloadedPieces.plus(bitList)
+                    }
+                    downloadedPieces }
+                .thenApply{ downloadedPieces ->
+                    val nonChokingPeers = connectedPeerStorage[infohash]?.filter{!it.first.peerChoking && it.first.amInterested }?.map{ pair->pair.first.knownPeer}
+                    val availablePieces : MutableMap<KnownPeer, List<Long>> = mutableMapOf()
+                    if (nonChokingPeers != null) {
+                        nonChokingPeers.asSequence().forEach{peer ->
+                            var peersDownloadedPieces : List<Long> = emptyList()
+                            for(byte in peerBitfields[infohash]!!.find{it.first.equals(peer)}!!.second){
+                                val bitList : List<Long> = byte.toUByte().toString(2).padStart(8,'0').toList().map {it.toString().toLong()}
+                                peersDownloadedPieces = peersDownloadedPieces.plus(bitList)
+                            }
+                            peersDownloadedPieces.mapIndexed{ index, pieceDownloaded ->
+                                if(downloadedPieces[index] == 0.toLong())
+                                    pieceDownloaded
+                                else
+                                    0.toLong()
+                            }
+                            availablePieces[peer] = peersDownloadedPieces
+                        }
+                    }
+                    availablePieces as Map<KnownPeer, List<Long>>
                 }
-
     }
+
 
     /**
      * List pieces that have been requested by (unchoked) peers.
@@ -860,7 +885,7 @@ class CourseTorrentImpl @Inject constructor(
                 .thenApply { if(it.toString() == unloadedVal) throw IllegalArgumentException() }
                 .thenApply {
                     peerRequestedBitfields[infohash]
-                            ?.filter{it.first.amChoking == false}
+                            ?.filter{ !it.first.amChoking }
                             ?.map{ peerPiecePair ->
                                 Pair(
                                         peerPiecePair.first.knownPeer,
@@ -887,7 +912,7 @@ class CourseTorrentImpl @Inject constructor(
                 .thenApply { it ?: throw IllegalArgumentException()}
                 .thenApply { if(it.toString() == unloadedVal) throw IllegalArgumentException() }
                 .thenCompose { fileStorage.getFiles(infohash)}
-        //TODO: zero bytes that aren't downloaded??
+        //TODO: zero bytes that aren't downloaded?? done in requestPieces/loadFiles?
 
     }
 
@@ -904,9 +929,33 @@ class CourseTorrentImpl @Inject constructor(
         return torrentStorage.getTorrentData(infohash)
                 .thenApply { it ?: throw IllegalArgumentException() }
                 .thenApply { if(it.toString()==unloadedVal) throw IllegalArgumentException() }
-                .thenApply {
-                    //todo: check zeroes, pad files
-                    fileStorage.addFiles(infohash, files) }
+                .thenCompose{ infoStorage.getInfo(infohash)  }
+                .thenApply { info ->
+                    val infoDict = Conversion.fromByteArray(info) as InfoDictionary
+                    val adjustedFiles : HashMap<String,ByteArray> = hashMapOf()
+                    if(infoDict.files == null) {  //single file case
+                        adjustedFiles[infoDict.name] = adjustFile(infoDict.name, infoDict.length!!, files)
+                    }
+                    else {
+                        for(multiFile in infoDict.files!!){
+                            adjustedFiles[multiFile.path] = adjustFile(multiFile.path, multiFile.length, files)
+                        }
+                    }
+                    fileStorage.addFiles(infohash, adjustedFiles.toMap())
+
+                }
+    }
+
+    private fun adjustFile(filename : String, realLength:Int, files : Map<String, ByteArray>) : ByteArray{
+        if(files.containsKey(filename)) {
+            val fileLength = files[filename]!!.size
+            if(fileLength < realLength){
+                return files[filename]!!.plus(ByteArray(realLength -fileLength) {0.toByte()})
+            } else {
+                return files[filename]!!.take(realLength).toByteArray()
+            }
+        }
+        return ByteArray(realLength) { 0.toByte() }
     }
 
     /**
@@ -924,28 +973,37 @@ class CourseTorrentImpl @Inject constructor(
                 .zip(infoStorage.getInfo(infohash)){ files, info ->
                     val infoDict = Conversion.fromByteArray(info) as InfoDictionary
                     val pieceLength = infoDict.pieceLength
-                    if(infoDict.files == null) { //single file case
-                        for(index in (1..infoDict.length!!)){
-                            true
-                        }
-
-                    } else {
-                        val pieces = infoDict.pieces
-                        for(file in infoDict.files!!){
-                            val ourFile = files[file.path] //should be the same format
-                            //checkHash()
+                    val pieces = infoDict.pieces
+                    var downloadedData : ByteArray = byteArrayOf()
+                    var fileLength = 0
+                    if(infoDict.files == null) {  //single file case
+                        fileLength = infoDict.length!!
+                        downloadedData = files[infoDict.name] ?: throw Exception("this should not happen")
+                    }
+                    else {
+                        //combine files into one ByteArray
+                        for(file in infoDict.files!!) {
+                            fileLength += file.length
+                            downloadedData = downloadedData.plus(
+                                    files[file.path] ?: ByteArray(file.length){0.toByte()}
+                            ) //TODO make sure files always contains files of appropriate length (load and loadFiles)
                         }
                     }
-                    true
+                    checkPiecesHash(pieces, downloadedData, fileLength, pieceLength)
                 }
-
     }
 
 
 
     /*******************************Private Functions*****************************/
 
-    private fun checkHash(pieceIndex: Int, file: ByteArray) : Boolean {
+    private fun checkPiecesHash(hashes: ByteArray, file: ByteArray, fileLength : Int, pieceLen :Int) : Boolean {
+        for(index in (0 until fileLength step pieceLen)){
+            val pieceHash : ByteArray = hashes.toList().chunked(20)[index].toByteArray() //todo what if pieces not multiple of 20
+            val calculatedHash = MessageDigest.getInstance("SHA-1").digest(file.toList().chunked(pieceLen)[index].toByteArray())
+            if(!pieceHash.contentEquals(calculatedHash))
+                return false
+        }
         return true
     }
 
@@ -1000,7 +1058,8 @@ class CourseTorrentImpl @Inject constructor(
     }
     /*
     * Use this to handle incoming messages after the handshake
-    *
+    * handles messages of types:
+    * keep-alive, choke, unchoke, interested, uninterested, have, bitfield, request
     * */
     private fun handleIncomingMessage(socket:Socket, infohash: String, peerID: String, message: ByteArray): Unit {
         val length = WireProtocolDecoder.length(message)
@@ -1011,7 +1070,6 @@ class CourseTorrentImpl @Inject constructor(
             0,1,2,3,5 -> 1
             4 -> 2 //todo: verify
             6 -> 4
-            7 -> 3
             else -> return
         }
         val decodedMessage = WireProtocolDecoder.decode(message, numOfInts)
@@ -1078,6 +1136,7 @@ class CourseTorrentImpl @Inject constructor(
                         ?: throw Exception()
                 val newByte : Byte = bitfield[byteIndex] or (2.0.pow(bitIndex).toInt().toByte())
                 bitfield[byteIndex] = newByte //todo verify this changes the peerBitfield
+                //todo update stats
             }
             PeerMsgType.BITFIELD -> {
                 //todo: verify bitfield?
@@ -1085,6 +1144,7 @@ class CourseTorrentImpl @Inject constructor(
                 peerBitfields[infohash]?.replaceAll {
                     if(it.first.peerId == peerID) Pair(it.first, decodedMessage.contents)
                     else it
+                    //todo update stats
                 }
             }
             PeerMsgType.REQUEST -> {
@@ -1095,12 +1155,6 @@ class CourseTorrentImpl @Inject constructor(
                         ?: throw Exception()
                 if(peer.first.amChoking) return
                 peerRequestedBitfields[infohash]?.find{it.first.knownPeer.equals(peer)}?.second?.add(Triple(pieceIndex, beginWithinPiece, blockLength))
-            }
-            PeerMsgType.PIECE -> {
-                val pieceIndex = decodedMessage.ints[1]
-                val beginWithinPiece = decodedMessage.ints[2]
-                val blockLength = decodedMessage.length - 9 //length of non-block part of message is 9 bytes
-                //val file=
             }
             else -> throw IllegalStateException() //TODO: don't throw?
         }
