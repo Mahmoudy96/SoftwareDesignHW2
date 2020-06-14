@@ -1,5 +1,8 @@
+//import org.jetbrains.dokka.gradle.DokkaTask
+
 plugins {
     application
+   // id("org.jetbrains.dokka") version "0.10.1"
 }
 
 application {
@@ -24,16 +27,22 @@ dependencies {
     implementation("il.ac.technion.cs.softwaredesign", "primitive-storage-layer", externalLibraryVersion)
     implementation("com.google.inject", "guice", guiceVersion)
     implementation("dev.misfitlabs.kotlinguice4", "kotlin-guice", kotlinGuiceVersion)
-    implementation ("com.github.kittinunf.fuel","fuel",fuelVersion)
-    implementation("com.github.kittinunf.result","result",resultVersion)
+    implementation("com.github.kittinunf.fuel", "fuel", fuelVersion)
+    implementation("com.github.kittinunf.result", "result", resultVersion)
     testImplementation("org.junit.jupiter", "junit-jupiter-api", junitVersion)
     testImplementation("org.junit.jupiter", "junit-jupiter-params", junitVersion)
     testImplementation("com.natpryce", "hamkrest", hamkrestVersion)
     testImplementation("io.mockk", "mockk", mockkVersion)
     // for completable future
-    implementation("com.github.vjames19.kotlin-futures","kotlin-futures-jdk8",completableFutureVersion)
+    implementation("com.github.vjames19.kotlin-futures", "kotlin-futures-jdk8", completableFutureVersion)
     // for listenable future
-    implementation("com.github.vjames19.kotlin-futures","kotlin-futures-guava",listenableFutureVersion)
+    implementation("com.github.vjames19.kotlin-futures", "kotlin-futures-guava", listenableFutureVersion)
     // For main
     implementation("com.xenomachina", "kotlin-argparser", "2.0.7")
 }
+//tasks {
+//    val dokka by getting(DokkaTask::class) {
+//        outputFormat = "html"
+//        outputDirectory = "$buildDir/dokka"
+//    }
+//}
