@@ -19,8 +19,4 @@ class TorrentStatistics @Inject constructor(
         return torrentStatsStorage.read(infohash.toByteArray())
             .thenApply { if (it == null) null else Conversion.fromByteArray(it) as Any }
     }
-
-    override fun updateTorrentStats(infohash: String, statsMap: Map<String, Any>): CompletableFuture<Unit> {
-        return torrentStatsStorage.write(infohash.toByteArray(), Conversion.toByteArray(statsMap) as ByteArray)
-    }
 }

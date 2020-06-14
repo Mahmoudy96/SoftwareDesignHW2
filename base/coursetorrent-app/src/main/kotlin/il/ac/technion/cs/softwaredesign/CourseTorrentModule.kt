@@ -10,8 +10,7 @@ class CourseTorrentModule : KotlinModule() {
         install(SecureStorageModule())
         install(LibraryModule())
         bind<CourseTorrent>().to<CourseTorrentImpl>()
-        //bind<SecureStorageFactory>().toInstance(SecureStorageFactoryImpl())
-        //bind<SecureStorage>().toInstance(SecureStorageImpl())
+
     }
 }
 

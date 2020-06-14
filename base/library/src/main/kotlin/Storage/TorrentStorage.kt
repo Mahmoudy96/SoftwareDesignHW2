@@ -38,4 +38,9 @@ class TorrentStorage @Inject constructor(
                 )
             }.thenApply { Unit }
     }
+    override fun isTorrentLoaded(infohash: String): CompletableFuture<Boolean> {
+        return torrentStorage.read(infohash.toByteArray(Charsets.UTF_8)).thenApply {
+            it != null && (it.toString(Charsets.UTF_8) != "unloaded")
+        }
+    }
 }

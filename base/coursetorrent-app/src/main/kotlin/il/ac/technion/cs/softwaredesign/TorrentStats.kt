@@ -1,5 +1,6 @@
 package il.ac.technion.cs.softwaredesign
 
+import java.io.Serializable
 import java.time.Duration
 
 data class TorrentStats(
@@ -14,4 +15,4 @@ data class TorrentStats(
 
     val leechTime: Duration, /* Amount of time this torrent was loaded, incomplete, and the client was started */
     val seedTime: Duration /* Amount of time this torrent was loaded, complete, and the client was started */
-)
+) :Serializable

@@ -34,8 +34,4 @@ class FileStorage @Inject constructor(
     override fun addFiles(infohash:String, files: Map<String, ByteArray>):CompletableFuture<Unit> {
         return fileStorage.write(infohash.toByteArray(), Conversion.toByteArray(files) as ByteArray)
     }
-
-    override fun getPiece(infohash:String, filename: String, pieceIndex: Int, pieceLength: Int): CompletableFuture<ByteArray> = TODO("lol")
-    override fun updatePiece(infohash: String, filename: String, pieceIndex: Int, piece: ByteArray, pieceLength: Int): CompletableFuture<Unit> = TODO("implement me")
-
 }
